@@ -93,14 +93,44 @@ func flatten(prefix string, data map[string]interface{}, result Values) {
 func Unflatten(flat Values) map[string]interface{} {
 	result := make(map[string]interface{})
 
-	for path, value := range flat {
+	// Get all paths and sort them by length (descending) and then alphabetically
+	// This ensures child paths are processed before parent paths
+	// e.g., "pdb.create" is processed before "pdb: {}"
+	paths := make([]string, 0, len(flat))
+	for path := range flat {
+		paths = append(paths, path)
+	}
+	sort.Slice(paths, func(i, j int) bool {
+		// First sort by depth (number of dots) in descending order
+		depthI := strings.Count(paths[i], ".")
+		depthJ := strings.Count(paths[j], ".")
+		if depthI != depthJ {
+			return depthI > depthJ // Deeper paths first
+		}
+		// If same depth, sort alphabetically
+		return paths[i] < paths[j]
+	})
+
+	for _, path := range paths {
+		value := flat[path]
 		parts := strings.Split(path, ".")
 		current := result
 
 		for i, part := range parts {
 			if i == len(parts)-1 {
 				// Last part - set the value
-				current[part] = value
+				// Only set if it doesn't already exist (child was already set)
+				if _, exists := current[part]; !exists {
+					current[part] = value
+				} else if emptyMap, ok := value.(map[string]interface{}); ok && len(emptyMap) == 0 {
+					// If the value we're trying to set is an empty map and something already exists,
+					// don't overwrite it (the existing content is from child paths)
+					// This handles the case where "pdb: {}" tries to overwrite "pdb: {create: true}"
+					continue
+				} else {
+					// Otherwise set the value (normal case)
+					current[part] = value
+				}
 			} else {
 				// Create nested map if needed
 				if _, exists := current[part]; !exists {

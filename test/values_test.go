@@ -790,6 +790,60 @@ func TestMerge_MixedScenario(t *testing.T) {
 	}
 }
 
+func TestUnflatten_EmptyMapDoesNotOverwriteChildren(t *testing.T) {
+	// Regression test: Empty map parents should not overwrite child keys during unflatten
+	// This was a bug where if both "pdb: {}" and "pdb.create: true" existed in the flat map,
+	// the iteration order could cause "pdb: {}" to overwrite the map containing "pdb.create"
+	flat := values.Values{
+		"pdb":            map[string]interface{}{}, // empty map parent
+		"pdb.create":     true,                     // child key
+		"pdb.minAvailable": 0,                      // another child key
+		"resources.limits":        map[string]interface{}{}, // empty map parent
+		"resources.limits.cpu":    "500m",                   // child key
+		"resources.limits.memory": "5Gi",                    // another child key
+	}
+
+	nested := values.Unflatten(flat)
+
+	// Convert back to Values for easier verification
+	result := values.Flatten(nested)
+
+	// Verify all child keys are preserved
+	if result["pdb.create"] != true {
+		t.Errorf("expected pdb.create=true, got %v", result["pdb.create"])
+	}
+	if result["pdb.minAvailable"] != 0 {
+		t.Errorf("expected pdb.minAvailable=0, got %v", result["pdb.minAvailable"])
+	}
+	if result["resources.limits.cpu"] != "500m" {
+		t.Errorf("expected resources.limits.cpu=500m, got %v", result["resources.limits.cpu"])
+	}
+	if result["resources.limits.memory"] != "5Gi" {
+		t.Errorf("expected resources.limits.memory=5Gi, got %v", result["resources.limits.memory"])
+	}
+
+	// Verify the parents are maps (not empty)
+	pdb, ok := nested["pdb"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected pdb to be a map, got %T", nested["pdb"])
+	}
+	if len(pdb) != 2 {
+		t.Errorf("expected pdb to have 2 children, got %d: %v", len(pdb), pdb)
+	}
+
+	resources, ok := nested["resources"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected resources to be a map, got %T", nested["resources"])
+	}
+	limits, ok := resources["limits"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected resources.limits to be a map, got %T", resources["limits"])
+	}
+	if len(limits) != 2 {
+		t.Errorf("expected resources.limits to have 2 children, got %d: %v", len(limits), limits)
+	}
+}
+
 func TestMerge_EmptyInputs(t *testing.T) {
 	t.Run("empty user values", func(t *testing.T) {
 		oldDefaults := values.Values{"key": "old"}
