@@ -22,19 +22,19 @@ const (
 
 // ClassifiedValue holds a value and its classification
 type ClassifiedValue struct {
-	Path          string         // Dot-separated path (e.g., "image.repository")
-	UserValue     interface{}    // Value from user's values file
-	DefaultValue  interface{}    // Value from chart defaults (nil if Unknown)
+	Path           string      // Dot-separated path (e.g., "image.repository")
+	UserValue      interface{} // Value from user's values file
+	DefaultValue   interface{} // Value from chart defaults (nil if Unknown)
 	Classification Classification
 }
 
 // ClassificationResult holds the complete classification results
 type ClassificationResult struct {
-	Entries     []ClassifiedValue
-	Customized  int
+	Entries       []ClassifiedValue
+	Customized    int
 	CopiedDefault int
-	Unknown     int
-	Total       int
+	Unknown       int
+	Total         int
 }
 
 // Values represents a parsed values file as a flat key-value map

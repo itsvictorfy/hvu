@@ -98,11 +98,11 @@ Examples:
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "preview changes without writing files")
 
 	// Required flags
-	cmd.MarkFlagRequired("chart")
-	cmd.MarkFlagRequired("repo")
-	cmd.MarkFlagRequired("from")
-	cmd.MarkFlagRequired("to")
-	cmd.MarkFlagRequired("values")
+	_ = cmd.MarkFlagRequired("chart")
+	_ = cmd.MarkFlagRequired("repo")
+	_ = cmd.MarkFlagRequired("from")
+	_ = cmd.MarkFlagRequired("to")
+	_ = cmd.MarkFlagRequired("values")
 
 	return cmd
 }

@@ -69,10 +69,10 @@ Examples:
 	cmd.Flags().StringVarP(&valuesFile, "values", "f", "", "values file to classify")
 
 	// Required flags
-	cmd.MarkFlagRequired("chart")
-	cmd.MarkFlagRequired("repo")
-	cmd.MarkFlagRequired("version")
-	cmd.MarkFlagRequired("values")
+	_ = cmd.MarkFlagRequired("chart")
+	_ = cmd.MarkFlagRequired("repo")
+	_ = cmd.MarkFlagRequired("version")
+	_ = cmd.MarkFlagRequired("values")
 
 	return cmd
 }
