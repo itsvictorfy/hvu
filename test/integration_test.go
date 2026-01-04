@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/itsvictorfy/hvu/pkg/service"
@@ -312,4 +313,252 @@ func formatTestValue(v interface{}) string {
 	default:
 		return values.FormatValue(v)
 	}
+}
+
+// TestIntegration_UpgradeOutputHasYAMLExtension verifies that upgrade output files
+// have the .yaml extension as expected
+func TestIntegration_UpgradeOutputHasYAMLExtension(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := loadTestConfig(t)
+	valuesFilePath := filepath.Join(testDataDir(), config.ValuesFilePath)
+	outputDir := t.TempDir()
+
+	// Run upgrade
+	upgradeOutput, err := service.Upgrade(&service.UpgradeInput{
+		Chart:       config.ChartName,
+		Repository:  config.ChartURL,
+		FromVersion: config.FromVersion,
+		ToVersion:   config.ToVersion,
+		ValuesFile:  valuesFilePath,
+		OutputDir:   outputDir,
+		DryRun:      false,
+	})
+	if err != nil {
+		t.Fatalf("upgrade failed: %v", err)
+	}
+
+	// Verify output file has .yaml extension
+	if !strings.HasSuffix(upgradeOutput.OutputPath, ".yaml") {
+		t.Errorf("output file should have .yaml extension, got: %s", upgradeOutput.OutputPath)
+	}
+
+	// Verify the filename format: {chart}-{version}-{timestamp}.yaml
+	filename := filepath.Base(upgradeOutput.OutputPath)
+	expectedPrefix := config.ChartName + "-" + config.ToVersion + "-"
+	if !strings.HasPrefix(filename, expectedPrefix) {
+		t.Errorf("output filename should start with %q, got: %s", expectedPrefix, filename)
+	}
+
+	t.Logf("Output file: %s", upgradeOutput.OutputPath)
+}
+
+// TestIntegration_CommentExtraction verifies that comments are extracted from chart defaults
+func TestIntegration_CommentExtraction(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := loadTestConfig(t)
+	valuesFilePath := filepath.Join(testDataDir(), config.ValuesFilePath)
+	outputDir := t.TempDir()
+
+	// Run upgrade (which internally extracts and applies comments)
+	upgradeOutput, err := service.Upgrade(&service.UpgradeInput{
+		Chart:       config.ChartName,
+		Repository:  config.ChartURL,
+		FromVersion: config.FromVersion,
+		ToVersion:   config.ToVersion,
+		ValuesFile:  valuesFilePath,
+		OutputDir:   outputDir,
+		DryRun:      false,
+	})
+	if err != nil {
+		t.Fatalf("upgrade failed: %v", err)
+	}
+
+	// Read the output file
+	outputContent, err := os.ReadFile(upgradeOutput.OutputPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	// The output should contain comments (lines starting with ##)
+	// Bitnami charts use ## @param style comments
+	hasComments := strings.Contains(string(outputContent), "##")
+	t.Logf("Output has comments: %v", hasComments)
+
+	// Log a sample of the output for debugging
+	lines := strings.Split(string(outputContent), "\n")
+	commentCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "##") {
+			commentCount++
+			if commentCount <= 5 {
+				t.Logf("  Comment: %s", line)
+			}
+		}
+	}
+	t.Logf("Total comment lines: %d", commentCount)
+}
+
+// TestIntegration_ToYAMLWithComments verifies ToYAMLWithComments function works correctly
+func TestIntegration_ToYAMLWithComments(t *testing.T) {
+	// Create test values
+	testValues := values.Values{
+		"image.repository": "nginx",
+		"image.tag":        "1.21",
+		"replicaCount":     3,
+		"service.type":     "ClusterIP",
+		"service.port":     80,
+	}
+
+	// Create test comments
+	comments := values.CommentMap{
+		"image.repository": "Docker image repository",
+		"image.tag":        "Docker image tag",
+		"replicaCount":     "Number of replicas to deploy",
+		"service.type":     "Kubernetes service type",
+		"service.port":     "Service port number",
+	}
+
+	// Generate YAML with comments
+	yamlOutput, err := testValues.ToYAMLWithComments(comments)
+	if err != nil {
+		t.Fatalf("ToYAMLWithComments failed: %v", err)
+	}
+
+	// Verify the output contains comments
+	if !strings.Contains(yamlOutput, "##") {
+		t.Error("expected output to contain comments (##)")
+	}
+
+	// Verify specific comments are present
+	expectedComments := []string{
+		"Docker image repository",
+		"Docker image tag",
+		"Number of replicas",
+		"Kubernetes service type",
+		"Service port number",
+	}
+
+	for _, expected := range expectedComments {
+		if !strings.Contains(yamlOutput, expected) {
+			t.Errorf("expected output to contain comment: %q", expected)
+		}
+	}
+
+	// Verify the YAML is still valid by parsing it
+	parsed, err := values.ParseYAML(yamlOutput)
+	if err != nil {
+		t.Fatalf("generated YAML is invalid: %v", err)
+	}
+
+	// Verify values are preserved
+	if parsed["image.repository"] != "nginx" {
+		t.Errorf("expected image.repository=nginx, got %v", parsed["image.repository"])
+	}
+	if parsed["replicaCount"] != 3 {
+		t.Errorf("expected replicaCount=3, got %v", parsed["replicaCount"])
+	}
+
+	t.Logf("Generated YAML with comments:\n%s", yamlOutput)
+}
+
+// TestIntegration_ExtractComments verifies ExtractComments function works correctly
+func TestIntegration_ExtractComments(t *testing.T) {
+	// Sample YAML content with @param comments (Bitnami style)
+	yamlContent := `
+## @param image.repository Docker image repository
+## @param image.tag Docker image tag
+image:
+  repository: nginx
+  tag: "1.21"
+
+## @param replicaCount Number of replicas
+replicaCount: 1
+
+## @param service.type Kubernetes service type
+## @param service.port Service port number
+service:
+  type: ClusterIP
+  port: 80
+`
+
+	comments := values.ExtractComments(yamlContent)
+
+	// Verify comments were extracted
+	if len(comments) == 0 {
+		t.Error("expected comments to be extracted")
+	}
+
+	// Verify specific comments
+	expectedComments := map[string]string{
+		"image.repository": "Docker image repository",
+		"image.tag":        "Docker image tag",
+		"replicaCount":     "Number of replicas",
+		"service.type":     "Kubernetes service type",
+		"service.port":     "Service port number",
+	}
+
+	for path, expectedComment := range expectedComments {
+		if comment, ok := comments[path]; !ok {
+			t.Errorf("expected comment for path %q", path)
+		} else if comment != expectedComment {
+			t.Errorf("expected comment for %q to be %q, got %q", path, expectedComment, comment)
+		}
+	}
+
+	t.Logf("Extracted %d comments", len(comments))
+	for path, comment := range comments {
+		t.Logf("  %s: %s", path, comment)
+	}
+}
+
+// TestIntegration_DryRunDoesNotCreateFile verifies dry run mode doesn't create files
+func TestIntegration_DryRunDoesNotCreateFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	config := loadTestConfig(t)
+	valuesFilePath := filepath.Join(testDataDir(), config.ValuesFilePath)
+	outputDir := t.TempDir()
+
+	// Run upgrade with dry run
+	upgradeOutput, err := service.Upgrade(&service.UpgradeInput{
+		Chart:       config.ChartName,
+		Repository:  config.ChartURL,
+		FromVersion: config.FromVersion,
+		ToVersion:   config.ToVersion,
+		ValuesFile:  valuesFilePath,
+		OutputDir:   outputDir,
+		DryRun:      true,
+	})
+	if err != nil {
+		t.Fatalf("upgrade failed: %v", err)
+	}
+
+	// Verify no output file was created
+	if upgradeOutput.OutputPath != "" {
+		t.Errorf("expected empty output path in dry run mode, got: %s", upgradeOutput.OutputPath)
+	}
+
+	// Verify the upgraded YAML is still generated
+	if upgradeOutput.UpgradedYAML == "" {
+		t.Error("expected UpgradedYAML to be populated even in dry run mode")
+	}
+
+	// Verify no files were created in output dir
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		t.Fatalf("failed to read output dir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected no files in output dir, found %d", len(entries))
+	}
+
+	t.Logf("Dry run completed, no files created")
 }

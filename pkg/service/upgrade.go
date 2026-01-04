@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/itsvictorfy/hvu/pkg/helm"
 	"github.com/itsvictorfy/hvu/pkg/values"
@@ -53,37 +55,55 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 		return nil, fmt.Errorf("source and target versions are identical: %s", input.FromVersion)
 	}
 
-	// Step 1: Fetch old chart defaults
-	slog.Debug("fetching old chart defaults", "version", input.FromVersion)
+	// Step 1: Fetch old and new chart defaults in parallel
+	slog.Debug("fetching chart defaults",
+		"oldVersion", input.FromVersion,
+		"newVersion", input.ToVersion,
+	)
 
-	oldDefaultsYAML, err := helm.GetValuesFileByVersion(input.Repository, input.Chart, input.FromVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch old chart defaults: %w", err)
+	var (
+		oldDefaultsYAML, newDefaultsYAML string
+		oldFetchErr, newFetchErr         error
+		wg                               sync.WaitGroup
+	)
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		oldDefaultsYAML, oldFetchErr = helm.GetValuesFileByVersion(input.Repository, input.Chart, input.FromVersion)
+	}()
+
+	go func() {
+		defer wg.Done()
+		newDefaultsYAML, newFetchErr = helm.GetValuesFileByVersion(input.Repository, input.Chart, input.ToVersion)
+	}()
+
+	wg.Wait()
+
+	// Check for fetch errors
+	if oldFetchErr != nil {
+		return nil, fmt.Errorf("failed to fetch old chart defaults: %w", oldFetchErr)
+	}
+	if newFetchErr != nil {
+		return nil, fmt.Errorf("failed to fetch new chart defaults: %w", newFetchErr)
 	}
 
+	// Parse old defaults
 	oldDefaults, err := values.ParseYAML(oldDefaultsYAML)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse old chart defaults: %w", err)
 	}
-
 	slog.Debug("parsed old defaults", "count", len(oldDefaults))
 
-	// Step 2: Fetch new chart defaults
-	slog.Debug("fetching new chart defaults", "version", input.ToVersion)
-
-	newDefaultsYAML, err := helm.GetValuesFileByVersion(input.Repository, input.Chart, input.ToVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch new chart defaults: %w", err)
-	}
-
+	// Parse new defaults
 	newDefaults, err := values.ParseYAML(newDefaultsYAML)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse new chart defaults: %w", err)
 	}
-
 	slog.Debug("parsed new defaults", "count", len(newDefaults))
 
-	// Step 3: Parse user values
+	// Step 2: Parse user values
 	slog.Debug("parsing user values", "file", input.ValuesFile)
 
 	userValues, err := values.ParseFile(input.ValuesFile)
@@ -93,7 +113,7 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 
 	slog.Debug("parsed user values", "count", len(userValues))
 
-	// Step 4: Classify user values against old defaults
+	// Step 3: Classify user values against old defaults
 	slog.Debug("classifying user values")
 
 	classification := values.Classify(userValues, oldDefaults)
@@ -104,13 +124,19 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 		"unknown", classification.Unknown,
 	)
 
+	// Step 4: Extract comments from new chart defaults
+	slog.Debug("extracting comments from target chart")
+
+	newComments := values.ExtractComments(newDefaultsYAML)
+	slog.Debug("extracted comments", "count", len(newComments))
+
 	// Step 5: Merge values
 	slog.Debug("generating upgraded values")
 
 	upgradedValues := values.Merge(userValues, oldDefaults, newDefaults)
 
-	// Generate YAML output
-	upgradedYAML, err := upgradedValues.ToYAML()
+	// Generate YAML output with comments from target chart
+	upgradedYAML, err := upgradedValues.ToYAMLWithComments(newComments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate YAML: %w", err)
 	}
@@ -131,9 +157,9 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 		if err := os.MkdirAll(input.OutputDir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create output directory: %w", err)
 		}
-
+		fileName := fmt.Sprintf("%s-%s-%s.yaml", input.Chart, input.ToVersion, time.Now().Format("2006-01-02-150405"))
 		// Write upgraded values file
-		outputPath := filepath.Join(input.OutputDir, "values-upgraded.yaml")
+		outputPath := filepath.Join(input.OutputDir, fileName)
 		if err := os.WriteFile(outputPath, []byte(upgradedYAML), 0644); err != nil {
 			return nil, fmt.Errorf("failed to write upgraded values: %w", err)
 		}

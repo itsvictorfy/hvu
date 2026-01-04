@@ -136,7 +136,14 @@ func Unflatten(flat Values) map[string]interface{} {
 				if _, exists := current[part]; !exists {
 					current[part] = make(map[string]interface{})
 				}
-				current = current[part].(map[string]interface{})
+				// Safe type assertion to handle potential path conflicts
+				nested, ok := current[part].(map[string]interface{})
+				if !ok {
+					// Path conflict: existing value is not a map, create new map
+					current[part] = make(map[string]interface{})
+					nested = current[part].(map[string]interface{})
+				}
+				current = nested
 			}
 		}
 	}

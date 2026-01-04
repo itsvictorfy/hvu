@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -54,18 +55,20 @@ func Classify(input *ClassifyInput) (*ClassifyOutput, error) {
 
 	slog.Debug("parsed default values", "count", len(defaultValues))
 
-	// Count empty maps for debugging
-	emptyMaps := 0
-	for k, v := range defaultValues {
-		if m, ok := v.(map[string]interface{}); ok && len(m) == 0 {
-			emptyMaps++
-			if emptyMaps <= 5 {
-				slog.Debug("empty map in defaults", "key", k)
+	// Count empty maps for debugging (only when verbose logging is enabled)
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		emptyMaps := 0
+		for k, v := range defaultValues {
+			if m, ok := v.(map[string]interface{}); ok && len(m) == 0 {
+				emptyMaps++
+				if emptyMaps <= 5 {
+					slog.Debug("empty map in defaults", "key", k)
+				}
 			}
 		}
-	}
-	if emptyMaps > 0 {
-		slog.Debug("total empty maps in defaults", "count", emptyMaps)
+		if emptyMaps > 0 {
+			slog.Debug("total empty maps in defaults", "count", emptyMaps)
+		}
 	}
 
 	// Parse user values
