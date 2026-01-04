@@ -1,195 +1,222 @@
-# hvu
+# hvu - Helm Values Upgrade
 
-hvu (Helm Values Upgrade) - A CLI tool that helps safely upgrade Helm chart values.yaml files when moving to newer chart versions.
+[![Go Version](https://img.shields.io/github/go-mod/go-version/itsvictorfy/hvu)](https://go.dev/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/itsvictorfy/hvu)](https://goreportcard.com/report/github.com/itsvictorfy/hvu)
 
-It analyzes differences between chart versions, classifies user customizations vs copied defaults, and generates an upgraded values file preserving your changes.
+A CLI tool that safely upgrades Helm chart `values.yaml` files when moving to newer chart versions.
 
-## Running the Program for Testing
+## Overview
 
-### Option 1: Run directly with `go run`
+When upgrading Helm charts, manually migrating your custom `values.yaml` can be error-prone. **hvu** automates this process by:
 
-```bash
-go run ./cmd/hvu/main.go --help
-```
+1. **Classifying** your values as customizations vs. copied defaults
+2. **Preserving** your intentional changes
+3. **Updating** defaults that have changed in the new chart version
+4. **Flagging** unknown or deprecated keys for review
 
-### Option 2: Build and run the binary
+## Installation
 
-```bash
-# Build the binary
-make build
-
-# Run it
-./bin/hvu --help
-```
-
-### Option 3: Install and run
+### From Source
 
 ```bash
-# Install to your GOPATH/bin
+# Clone the repository
+git clone https://github.com/itsvictorfy/hvu.git
+cd hvu
+
+# Build and install
 make install
-
-# Run from anywhere
-hvu --help
 ```
 
-## Available Commands
+### Pre-built Binaries
 
-### Upgrade Command
+Download from the [Releases](https://github.com/itsvictorfy/hvu/releases) page.
 
-Upgrade values file to a new chart version:
+## Quick Start
+
+### Upgrade a Values File
 
 ```bash
-go run ./cmd/hvu/main.go upgrade \
+hvu upgrade \
   --chart postgresql \
   --repo https://charts.bitnami.com/bitnami \
-  --from 12.1.0 --to 16.0.0 \
+  --from 12.1.0 \
+  --to 16.0.0 \
   --values ./my-values.yaml
 ```
 
-Or with the built binary:
+### Classify Your Customizations
+
+See which values are customizations vs. defaults:
 
 ```bash
-./bin/hvu upgrade \
-  --chart postgresql \
-  --repo https://charts.bitnami.com/bitnami \
-  --from 12.1.0 --to 16.0.0 \
-  --values ./my-values.yaml
-```
-
-### Classify Command
-
-Show customizations vs defaults in a values file:
-
-```bash
-go run ./cmd/hvu/main.go classify \
+hvu classify \
   --chart postgresql \
   --repo https://charts.bitnami.com/bitnami \
   --version 15.2.8 \
   --values ./my-values.yaml
 ```
 
-### Version Command
+## Commands
 
-Display version information:
+### `upgrade`
+
+Upgrades a values file from one chart version to another.
 
 ```bash
-go run ./cmd/hvu/main.go version
+hvu upgrade [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--chart` | Chart name (required) |
+| `--repo` | Chart repository URL (required) |
+| `--from` | Source chart version (required) |
+| `--to` | Target chart version (required) |
+| `-f, --values` | Path to your values file (required) |
+| `-o, --output` | Output directory (default: `./upgrade-output`) |
+| `--dry-run` | Preview changes without writing files |
+
+**Example:**
+
+```bash
+hvu upgrade \
+  --chart grafana \
+  --repo https://grafana.github.io/helm-charts \
+  --from 8.0.0 \
+  --to 10.0.0 \
+  --values ./grafana-values.yaml \
+  --output ./upgraded
+```
+
+### `classify`
+
+Analyzes a values file and classifies each key.
+
+```bash
+hvu classify [flags]
+```
+
+**Classification Categories:**
+- `CUSTOMIZED` - Values you've intentionally changed
+- `COPIED_DEFAULT` - Values matching chart defaults (safe to update)
+- `UNKNOWN` - Keys not in chart defaults (may be obsolete)
+
+**Example:**
+
+```bash
+hvu classify \
+  --chart nginx-ingress \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --version 4.0.0 \
+  --values ./ingress-values.yaml
+```
+
+### `version`
+
+Displays version information.
+
+```bash
+hvu version
 ```
 
 ## Global Flags
 
-- `-o, --output string` - Output directory for generated files (default: ./upgrade-output)
-- `-q, --quiet` - Suppress non-essential output
-- `-v, --verbose` - Enable verbose logging
+| Flag | Description |
+|------|-------------|
+| `-v, --verbose` | Enable verbose logging |
+| `-q, --quiet` | Suppress non-essential output |
+| `-h, --help` | Help for any command |
 
-## Testing
+## How It Works
 
-### Unit Tests
-
-```bash
-make test
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Your Values    │     │  Old Chart      │     │  New Chart      │
+│  (values.yaml)  │     │  Defaults       │     │  Defaults       │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         └───────────┬───────────┴───────────┬───────────┘
+                     │                       │
+                     ▼                       ▼
+              ┌──────────────┐        ┌──────────────┐
+              │   Classify   │───────▶│    Merge     │
+              │   Values     │        │    Values    │
+              └──────────────┘        └──────┬───────┘
+                                             │
+                                             ▼
+                                    ┌─────────────────┐
+                                    │  Upgraded       │
+                                    │  Values File    │
+                                    └─────────────────┘
 ```
 
-Runs `go test -race -cover ./...`
-
-### With Coverage Report
-
-```bash
-make test-coverage
-```
-
-Generates an HTML coverage report at `coverage.html`
-
-### Integration Tests
-
-```bash
-make test-integration
-```
-
-Runs the integration test script at `scripts/integration-test.sh`
-
-### Run Everything (lint + test + build)
-
-```bash
-make all
-```
-
-### Direct Go Command
-
-```bash
-go test ./...
-```
+1. **Fetch** default values from both chart versions
+2. **Classify** your values against the old defaults
+3. **Merge** your customizations with the new defaults
+4. **Output** an upgraded values file with preserved comments
 
 ## Development
 
-### Format Code
+### Prerequisites
+
+- Go 1.21 or later
+- Make
+
+### Building
 
 ```bash
-make fmt
-```
+# Build for current platform
+make build
 
-### Run Linters
+# Build for all platforms
+make build-all
 
-```bash
+# Run tests
+make test
+
+# Run linter
 make lint
 ```
 
-### Auto-fix Linting Issues
+### Project Structure
 
-```bash
-make lint-fix
+```
+hvu/
+├── cmd/hvu/          # CLI entry point
+├── pkg/
+│   ├── cli/          # Command definitions
+│   ├── helm/         # Helm chart interactions
+│   ├── service/      # Business logic
+│   └── values/       # YAML processing
+├── test/             # Test files
+└── testdata/         # Test fixtures
 ```
 
-### Tidy Go Modules
+### Running Tests
 
 ```bash
-make mod-tidy
+# Unit tests
+make test
+
+# With coverage
+make test-coverage
+
+# Integration tests (requires network)
+go test -tags=integration ./test/...
 ```
 
-### Fetch Test Chart Data
+## Contributing
 
-```bash
-make testdata
-```
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## Building
+## License
 
-### Build for Current Platform
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-```bash
-make build
-```
+## Acknowledgments
 
-### Build for Linux
-
-```bash
-make build-linux
-```
-
-### Build for macOS
-
-```bash
-make build-darwin
-```
-
-### Build for All Platforms
-
-```bash
-make build-all
-```
-
-## Cleaning
-
-Remove build artifacts and coverage reports:
-
-```bash
-make clean
-```
-
-## Help
-
-View all available make targets:
-
-```bash
-make help
-```
+- [Helm](https://helm.sh/) - The package manager for Kubernetes
+- [Cobra](https://github.com/spf13/cobra) - CLI framework
+- [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3) - YAML processing

@@ -1,3 +1,47 @@
-test-data/
-Makefile
-upgrade-output/
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/hvu
+/bin/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Output directories
+/upgrade-output/
+/dist/
+
+# Generated classification files
+*-classify
+*-classify.txt
+
+# Temporary files
+*.tmp
+*.log
+
+# Local development files
+.env
+.env.local
+*.local
+
+/test
+/testdata

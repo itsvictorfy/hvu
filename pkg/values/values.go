@@ -58,7 +58,24 @@ func ParseFile(path string) (Values, error) {
 	return ParseYAML(string(content))
 }
 
-// Flatten converts a nested map to a flat map with dot-separated keys
+// pathSeparator is used to separate path components in flattened keys
+const pathSeparator = "::"
+
+// escapeKeyDots escapes dots in a single key name so they don't conflict with path separators
+// This is needed because YAML keys can contain dots (e.g., "grafana.ini", "datasources.yaml")
+func escapeKeyDots(key string) string {
+	// Escape existing path separators first (to handle edge cases)
+	key = strings.ReplaceAll(key, pathSeparator, "\\"+pathSeparator)
+	return key
+}
+
+// unescapeKeyDots reverses the escaping done by escapeKeyDots
+func unescapeKeyDots(key string) string {
+	return strings.ReplaceAll(key, "\\"+pathSeparator, pathSeparator)
+}
+
+// Flatten converts a nested map to a flat map with path-separated keys
+// Uses "::" as the path separator to avoid conflicts with dots in YAML key names
 func Flatten(data map[string]interface{}) Values {
 	result := make(Values)
 	flatten("", data, result)
@@ -67,9 +84,11 @@ func Flatten(data map[string]interface{}) Values {
 
 func flatten(prefix string, data map[string]interface{}, result Values) {
 	for key, value := range data {
-		fullKey := key
+		// Escape the key to preserve dots in key names
+		escapedKey := escapeKeyDots(key)
+		fullKey := escapedKey
 		if prefix != "" {
-			fullKey = prefix + "." + key
+			fullKey = prefix + pathSeparator + escapedKey
 		}
 
 		switch v := value.(type) {
@@ -90,20 +109,21 @@ func flatten(prefix string, data map[string]interface{}, result Values) {
 }
 
 // Unflatten converts a flat map back to a nested structure
+// Uses "::" as the path separator and unescapes key names to restore dots
 func Unflatten(flat Values) map[string]interface{} {
 	result := make(map[string]interface{})
 
 	// Get all paths and sort them by length (descending) and then alphabetically
 	// This ensures child paths are processed before parent paths
-	// e.g., "pdb.create" is processed before "pdb: {}"
+	// e.g., "pdb::create" is processed before "pdb: {}"
 	paths := make([]string, 0, len(flat))
 	for path := range flat {
 		paths = append(paths, path)
 	}
 	sort.Slice(paths, func(i, j int) bool {
-		// First sort by depth (number of dots) in descending order
-		depthI := strings.Count(paths[i], ".")
-		depthJ := strings.Count(paths[j], ".")
+		// First sort by depth (number of separators) in descending order
+		depthI := strings.Count(paths[i], pathSeparator)
+		depthJ := strings.Count(paths[j], pathSeparator)
 		if depthI != depthJ {
 			return depthI > depthJ // Deeper paths first
 		}
@@ -113,15 +133,18 @@ func Unflatten(flat Values) map[string]interface{} {
 
 	for _, path := range paths {
 		value := flat[path]
-		parts := strings.Split(path, ".")
+		parts := strings.Split(path, pathSeparator)
 		current := result
 
 		for i, part := range parts {
+			// Unescape the key to restore original dots in key names
+			originalKey := unescapeKeyDots(part)
+
 			if i == len(parts)-1 {
 				// Last part - set the value
 				// Only set if it doesn't already exist (child was already set)
-				if _, exists := current[part]; !exists {
-					current[part] = value
+				if _, exists := current[originalKey]; !exists {
+					current[originalKey] = value
 				} else if emptyMap, ok := value.(map[string]interface{}); ok && len(emptyMap) == 0 {
 					// If the value we're trying to set is an empty map and something already exists,
 					// don't overwrite it (the existing content is from child paths)
@@ -129,19 +152,19 @@ func Unflatten(flat Values) map[string]interface{} {
 					continue
 				} else {
 					// Otherwise set the value (normal case)
-					current[part] = value
+					current[originalKey] = value
 				}
 			} else {
 				// Create nested map if needed
-				if _, exists := current[part]; !exists {
-					current[part] = make(map[string]interface{})
+				if _, exists := current[originalKey]; !exists {
+					current[originalKey] = make(map[string]interface{})
 				}
 				// Safe type assertion to handle potential path conflicts
-				nested, ok := current[part].(map[string]interface{})
+				nested, ok := current[originalKey].(map[string]interface{})
 				if !ok {
 					// Path conflict: existing value is not a map, create new map
-					current[part] = make(map[string]interface{})
-					nested = current[part].(map[string]interface{})
+					current[originalKey] = make(map[string]interface{})
+					nested = current[originalKey].(map[string]interface{})
 				}
 				current = nested
 			}
@@ -239,13 +262,13 @@ func FormatValue(v interface{}) string {
 }
 
 // findParentEmptyMap checks if any parent path of the given key is an empty map in defaults
-// e.g., for "primary.nodeSelector.workload-type", check if "primary.nodeSelector" exists as empty map
+// e.g., for "primary::nodeSelector::workload-type", check if "primary::nodeSelector" exists as empty map
 func findParentEmptyMap(path string, defaults Values) string {
-	parts := strings.Split(path, ".")
+	parts := strings.Split(path, pathSeparator)
 
 	// Check each parent level from most specific to least specific
 	for i := len(parts) - 1; i > 0; i-- {
-		parentPath := strings.Join(parts[:i], ".")
+		parentPath := strings.Join(parts[:i], pathSeparator)
 		if val, exists := defaults[parentPath]; exists {
 			// Check if this parent is an empty map
 			if emptyMap, ok := val.(map[string]interface{}); ok && len(emptyMap) == 0 {
@@ -314,4 +337,11 @@ func (v Values) GetPaths() []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+// PathToDisplayFormat converts an internal path (using "::" separator) to
+// a human-readable format using "." for display purposes.
+// This handles the conversion correctly, preserving dots that are part of key names.
+func PathToDisplayFormat(path string) string {
+	return strings.ReplaceAll(path, pathSeparator, ".")
 }

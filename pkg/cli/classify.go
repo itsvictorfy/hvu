@@ -98,7 +98,7 @@ func printClassifyResults(output *service.ClassifyOutput) {
 		fmt.Println("--------------------------------------------")
 		for _, entry := range result.Entries {
 			if entry.Classification == values.Customized {
-				fmt.Printf("  %s\n", entry.Path)
+				fmt.Printf("  %s\n", values.PathToDisplayFormat(entry.Path))
 				fmt.Printf("    user:    %v\n", entry.UserValue)
 				fmt.Printf("    default: %v\n", entry.DefaultValue)
 			}
@@ -111,7 +111,7 @@ func printClassifyResults(output *service.ClassifyOutput) {
 		fmt.Println("--------------------------------------------------")
 		for _, entry := range result.Entries {
 			if entry.Classification == values.Unknown {
-				fmt.Printf("  %s: %v\n", entry.Path, entry.UserValue)
+				fmt.Printf("  %s: %v\n", values.PathToDisplayFormat(entry.Path), entry.UserValue)
 			}
 		}
 		fmt.Println()
