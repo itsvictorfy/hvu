@@ -141,14 +141,14 @@ func TestConfirmImageUpgrade_OutputFormat(t *testing.T) {
 	// Check for expected content
 	expectedStrings := []string{
 		"Custom image tags detected",
-		"image.tag",              // display format uses dots
-		"controller.image.tag",   // display format uses dots
-		"1.5.0",                  // user tag
-		"1.0.0",                  // old default
-		"2.0.0",                  // new default
-		"v2.1.0",                 // user tag
-		"v2.0.0",                 // old default
-		"v3.0.0",                 // new default
+		"image.tag",            // display format uses dots
+		"controller.image.tag", // display format uses dots
+		"1.5.0",                // user tag
+		"1.0.0",                // old default
+		"2.0.0",                // new default
+		"v2.1.0",               // user tag
+		"v2.0.0",               // old default
+		"v3.0.0",               // new default
 		"Would you like to upgrade image tags to new defaults? [y/N]:",
 	}
 

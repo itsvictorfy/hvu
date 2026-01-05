@@ -94,17 +94,17 @@ func TestDetectCustomImageTags_WithCustomTag(t *testing.T) {
 func TestDetectCustomImageTags_MultipleCustomTags(t *testing.T) {
 	// Multiple custom image tags
 	userValues := Values{
-		"image::tag":            "1.5.0",
+		"image::tag":             "1.5.0",
 		"controller::image::tag": "v2.1.0",
 		"webhook::image::tag":    "0.9.0", // matches old default
 	}
 	oldDefaults := Values{
-		"image::tag":            "1.0.0",
+		"image::tag":             "1.0.0",
 		"controller::image::tag": "v2.0.0",
 		"webhook::image::tag":    "0.9.0",
 	}
 	newDefaults := Values{
-		"image::tag":            "2.0.0",
+		"image::tag":             "2.0.0",
 		"controller::image::tag": "v3.0.0",
 		"webhook::image::tag":    "1.0.0",
 	}
@@ -193,10 +193,10 @@ func TestDetectCustomImageTags_NonStringValues(t *testing.T) {
 
 func TestApplyImageUpgrades(t *testing.T) {
 	values := Values{
-		"image::tag":            "1.5.0",
-		"image::repository":     "nginx",
+		"image::tag":             "1.5.0",
+		"image::repository":      "nginx",
 		"controller::image::tag": "v2.1.0",
-		"replicaCount":          3,
+		"replicaCount":           3,
 	}
 
 	upgrades := []ImageChange{

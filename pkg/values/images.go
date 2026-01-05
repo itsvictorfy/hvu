@@ -6,11 +6,11 @@ import (
 
 // ImageChange represents a detected change in image tag
 type ImageChange struct {
-	Path         string // The path to the image tag (e.g., "image::tag")
-	UserTag      string // The user's current tag
-	OldDefault   string // The old chart's default tag
-	NewDefault   string // The new chart's default tag
-	IsCustomized bool   // Whether user has customized this tag
+	Path         string
+	UserTag      string
+	OldDefault   string
+	NewDefault   string
+	IsCustomized bool
 }
 
 // imageTagPatterns are common path suffixes that indicate image tags
@@ -48,10 +48,8 @@ func DetectCustomImageTags(userValues, oldDefaults, newDefaults Values) []ImageC
 			continue
 		}
 
-		// Check if user customized the tag (differs from old default)
 		isCustomized := userTag != oldDefaultStr
 
-		// Only report if there's a change to consider
 		if isCustomized && newDefaultStr != oldDefaultStr {
 			changes = append(changes, ImageChange{
 				Path:         path,

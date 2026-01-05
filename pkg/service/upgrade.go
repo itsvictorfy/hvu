@@ -26,15 +26,15 @@ type UpgradeInput struct {
 
 // UpgradeOutput contains the results of upgrade
 type UpgradeOutput struct {
-	Classification      *values.ClassificationResult
-	UpgradedYAML        string
-	OutputPath          string
-	OldDefaultsCount    int
-	NewDefaultsCount    int
-	UserValuesCount     int
-	CustomImageTags     []values.ImageChange // Detected custom image tags
-	ImageTagsUpgraded   bool                 // Whether user chose to upgrade image tags
-	PromptForImageTags  bool                 // Whether to prompt user about image tags
+	Classification     *values.ClassificationResult
+	UpgradedYAML       string
+	OutputPath         string
+	OldDefaultsCount   int
+	NewDefaultsCount   int
+	UserValuesCount    int
+	CustomImageTags    []values.ImageChange // Detected custom image tags
+	ImageTagsUpgraded  bool                 // Whether user chose to upgrade image tags
+	PromptForImageTags bool                 // Whether to prompt user about image tags
 }
 
 // Upgrade runs the upgrade logic
@@ -203,12 +203,12 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 
 // FinalizeUpgradeInput contains parameters for finalizing an upgrade after user prompt
 type FinalizeUpgradeInput struct {
-	OriginalOutput  *UpgradeOutput
-	ApplyUpgrades   bool   // Whether to apply image tag upgrades
-	Chart           string // Chart name for filename
-	ToVersion       string // Target version for filename
-	OutputDir       string
-	DryRun          bool
+	OriginalOutput *UpgradeOutput
+	ApplyUpgrades  bool   // Whether to apply image tag upgrades
+	Chart          string // Chart name for filename
+	ToVersion      string // Target version for filename
+	OutputDir      string
+	DryRun         bool
 }
 
 // FinalizeUpgrade applies the user's image tag decision and writes the final output
