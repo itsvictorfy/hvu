@@ -327,20 +327,30 @@ func findCustomizedParentMaps(userValues, oldDefaults Values) map[string]bool {
 	customizedParents := make(map[string]bool)
 
 	for userPath := range userValues {
+		// Skip if exact path exists in old defaults
 		if _, exists := oldDefaults[userPath]; exists {
 			continue
 		}
 
+		// Get the immediate parent (one level up)
 		parts := strings.Split(userPath, pathSeparator)
-		for i := len(parts) - 1; i > 0; i-- {
-			parentPath := strings.Join(parts[:i], pathSeparator)
-			parentPrefix := parentPath + pathSeparator
+		if len(parts) < 2 {
+			continue
+		}
 
-			for oldPath := range oldDefaults {
-				if strings.HasPrefix(oldPath, parentPrefix) {
-					customizedParents[parentPath] = true
-					break
-				}
+		parentPath := strings.Join(parts[:len(parts)-1], pathSeparator)
+		parentPrefix := parentPath + pathSeparator
+
+		if val, exists := oldDefaults[parentPath]; exists {
+			if emptyMap, ok := val.(map[string]interface{}); ok && len(emptyMap) == 0 {
+				continue // Empty map case - not a "replacement", just adding to empty
+			}
+		}
+
+		for oldPath := range oldDefaults {
+			if strings.HasPrefix(oldPath, parentPrefix) && oldPath != userPath {
+				customizedParents[parentPath] = true
+				break
 			}
 		}
 	}
