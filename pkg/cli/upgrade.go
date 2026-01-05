@@ -7,18 +7,20 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/itsvictorfy/hvu/pkg/prompt"
 	"github.com/itsvictorfy/hvu/pkg/service"
 )
 
 func UpgradeCmd() *cobra.Command {
 	var (
-		chart       string
-		repository  string
-		fromVersion string
-		toVersion   string
-		valuesFile  string
-		outputDir   string
-		dryRun      bool
+		chart         string
+		repository    string
+		fromVersion   string
+		toVersion     string
+		valuesFile    string
+		outputDir     string
+		dryRun        bool
+		upgradeImages bool
 	)
 
 	cmd := &cobra.Command{
@@ -67,16 +69,38 @@ Examples:
 			)
 
 			output, err := service.Upgrade(&service.UpgradeInput{
-				Chart:       chart,
-				Repository:  repository,
-				FromVersion: fromVersion,
-				ToVersion:   toVersion,
-				ValuesFile:  valuesFile,
-				OutputDir:   outputDir,
-				DryRun:      dryRun,
+				Chart:         chart,
+				Repository:    repository,
+				FromVersion:   fromVersion,
+				ToVersion:     toVersion,
+				ValuesFile:    valuesFile,
+				OutputDir:     outputDir,
+				DryRun:        dryRun,
+				UpgradeImages: upgradeImages,
 			})
 			if err != nil {
 				return err
+			}
+
+			// Handle interactive prompt for custom image tags
+			if output.PromptForImageTags && !dryRun {
+				prompter := prompt.NewInteractivePrompter()
+				applyUpgrades, err := prompter.ConfirmImageUpgrade(output.CustomImageTags)
+				if err != nil {
+					return fmt.Errorf("failed to prompt for image upgrade: %w", err)
+				}
+
+				output, err = service.FinalizeUpgrade(&service.FinalizeUpgradeInput{
+					OriginalOutput: output,
+					ApplyUpgrades:  applyUpgrades,
+					Chart:          chart,
+					ToVersion:      toVersion,
+					OutputDir:      outputDir,
+					DryRun:         dryRun,
+				})
+				if err != nil {
+					return err
+				}
 			}
 
 			printUpgradeResults(output, dryRun)
@@ -93,6 +117,7 @@ Examples:
 	cmd.Flags().StringVarP(&valuesFile, "values", "f", "", "path to current values file")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "output directory (default: current directory)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "preview changes without writing files")
+	cmd.Flags().BoolVar(&upgradeImages, "upgrade-images", false, "automatically upgrade custom image tags to new chart defaults")
 
 	_ = cmd.MarkFlagRequired("chart")
 	_ = cmd.MarkFlagRequired("repo")
@@ -123,5 +148,14 @@ func printUpgradeResults(output *service.UpgradeOutput, dryRun bool) {
 	fmt.Printf("  %d defaults updated to new version\n", classification.CopiedDefault)
 	if classification.Unknown > 0 {
 		fmt.Printf("  %d unknown keys kept (review recommended)\n", classification.Unknown)
+	}
+
+	// Show image tag info
+	if len(output.CustomImageTags) > 0 {
+		if output.ImageTagsUpgraded {
+			fmt.Printf("  %d custom image tags upgraded to new defaults\n", len(output.CustomImageTags))
+		} else {
+			fmt.Printf("  %d custom image tags preserved (not upgraded)\n", len(output.CustomImageTags))
+		}
 	}
 }
