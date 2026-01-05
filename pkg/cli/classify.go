@@ -60,15 +60,12 @@ Examples:
 		},
 	}
 
-	// Chart identification
 	cmd.Flags().StringVar(&chart, "chart", "", "chart name")
 	cmd.Flags().StringVar(&repository, "repo", "", "chart repository URL")
 	cmd.Flags().StringVar(&version, "version", "", "chart version to compare against")
 
-	// Values input
 	cmd.Flags().StringVarP(&valuesFile, "values", "f", "", "values file to classify")
 
-	// Required flags
 	_ = cmd.MarkFlagRequired("chart")
 	_ = cmd.MarkFlagRequired("repo")
 	_ = cmd.MarkFlagRequired("version")
@@ -84,7 +81,6 @@ func printClassifyResults(output *service.ClassifyOutput) {
 	fmt.Println("======================")
 	fmt.Println()
 
-	// Summary
 	fmt.Printf("Summary:\n")
 	fmt.Printf("  CUSTOMIZED:     %d keys (user modifications)\n", result.Customized)
 	fmt.Printf("  COPIED_DEFAULT: %d keys (match chart defaults)\n", result.CopiedDefault)
@@ -92,7 +88,6 @@ func printClassifyResults(output *service.ClassifyOutput) {
 	fmt.Printf("  Total:          %d keys\n", result.Total)
 	fmt.Println()
 
-	// Detailed output
 	if result.Customized > 0 {
 		fmt.Println("CUSTOMIZED (user modifications to preserve):")
 		fmt.Println("--------------------------------------------")

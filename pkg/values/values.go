@@ -62,9 +62,7 @@ func ParseFile(path string) (Values, error) {
 const pathSeparator = "::"
 
 // escapeKeyDots escapes dots in a single key name so they don't conflict with path separators
-// This is needed because YAML keys can contain dots (e.g., "grafana.ini", "datasources.yaml")
 func escapeKeyDots(key string) string {
-	// Escape existing path separators first (to handle edge cases)
 	key = strings.ReplaceAll(key, pathSeparator, "\\"+pathSeparator)
 	return key
 }
@@ -84,7 +82,6 @@ func Flatten(data map[string]interface{}) Values {
 
 func flatten(prefix string, data map[string]interface{}, result Values) {
 	for key, value := range data {
-		// Escape the key to preserve dots in key names
 		escapedKey := escapeKeyDots(key)
 		fullKey := escapedKey
 		if prefix != "" {
@@ -94,15 +91,11 @@ func flatten(prefix string, data map[string]interface{}, result Values) {
 		switch v := value.(type) {
 		case map[string]interface{}:
 			if len(v) == 0 {
-				// Store empty maps as a marker value so they're preserved in the flattened structure
-				// This is important for comparing against user values that add keys to previously empty maps
 				result[fullKey] = map[string]interface{}{}
 			} else {
-				// Recurse into non-empty nested maps
 				flatten(fullKey, v, result)
 			}
 		default:
-			// Store leaf values
 			result[fullKey] = value
 		}
 	}
@@ -113,21 +106,16 @@ func flatten(prefix string, data map[string]interface{}, result Values) {
 func Unflatten(flat Values) map[string]interface{} {
 	result := make(map[string]interface{})
 
-	// Get all paths and sort them by length (descending) and then alphabetically
-	// This ensures child paths are processed before parent paths
-	// e.g., "pdb::create" is processed before "pdb: {}"
 	paths := make([]string, 0, len(flat))
 	for path := range flat {
 		paths = append(paths, path)
 	}
 	sort.Slice(paths, func(i, j int) bool {
-		// First sort by depth (number of separators) in descending order
 		depthI := strings.Count(paths[i], pathSeparator)
 		depthJ := strings.Count(paths[j], pathSeparator)
 		if depthI != depthJ {
 			return depthI > depthJ // Deeper paths first
 		}
-		// If same depth, sort alphabetically
 		return paths[i] < paths[j]
 	})
 
@@ -137,32 +125,22 @@ func Unflatten(flat Values) map[string]interface{} {
 		current := result
 
 		for i, part := range parts {
-			// Unescape the key to restore original dots in key names
 			originalKey := unescapeKeyDots(part)
 
 			if i == len(parts)-1 {
-				// Last part - set the value
-				// Only set if it doesn't already exist (child was already set)
 				if _, exists := current[originalKey]; !exists {
 					current[originalKey] = value
 				} else if emptyMap, ok := value.(map[string]interface{}); ok && len(emptyMap) == 0 {
-					// If the value we're trying to set is an empty map and something already exists,
-					// don't overwrite it (the existing content is from child paths)
-					// This handles the case where "pdb: {}" tries to overwrite "pdb: {create: true}"
 					continue
 				} else {
-					// Otherwise set the value (normal case)
 					current[originalKey] = value
 				}
 			} else {
-				// Create nested map if needed
 				if _, exists := current[originalKey]; !exists {
 					current[originalKey] = make(map[string]interface{})
 				}
-				// Safe type assertion to handle potential path conflicts
 				nested, ok := current[originalKey].(map[string]interface{})
 				if !ok {
-					// Path conflict: existing value is not a map, create new map
 					current[originalKey] = make(map[string]interface{})
 					nested = current[originalKey].(map[string]interface{})
 				}
@@ -180,11 +158,9 @@ func Classify(userValues, defaultValues Values) *ClassificationResult {
 		Entries: make([]ClassifiedValue, 0),
 	}
 
-	// Track some stats for logging
 	exactMatches := 0
 	parentEmptyMapMatches := 0
 
-	// Process all user values
 	for path, userVal := range userValues {
 		entry := ClassifiedValue{
 			Path:      path,
@@ -208,11 +184,9 @@ func Classify(userValues, defaultValues Values) *ClassificationResult {
 				)
 			}
 		} else {
-			// Key doesn't exist in defaults - but check if parent is an empty map
-			// e.g., user has "primary.nodeSelector.workload-type" but defaults only has "primary.nodeSelector: {}"
+			// Key doesn't exist in defaults - check if parent is an empty map or has children
 			if parentDefault := findParentEmptyMap(path, defaultValues); parentDefault != "" {
-				// Parent exists as empty map in defaults, user is adding content to it
-				entry.DefaultValue = nil // Parent was empty map
+				entry.DefaultValue = nil
 				entry.Classification = Customized
 				result.Customized++
 				parentEmptyMapMatches++
@@ -221,13 +195,23 @@ func Classify(userValues, defaultValues Values) *ClassificationResult {
 					"userValue", FormatValue(userVal),
 					"parentPath", parentDefault,
 				)
+			} else if parentWithChildren := findParentWithChildren(path, defaultValues); parentWithChildren != "" {
+				// Parent exists with different children - user is customizing the map contents
+				entry.DefaultValue = nil
+				entry.Classification = Customized
+				result.Customized++
+				slog.Debug("customized value (parent has children with different keys)",
+					"path", path,
+					"userValue", FormatValue(userVal),
+					"parentPath", parentWithChildren,
+				)
 			} else {
 				entry.Classification = Unknown
 				result.Unknown++
 				slog.Debug("unknown value",
 					"path", path,
 					"userValue", FormatValue(userVal),
-					"reason", "not in defaults and no parent empty map found",
+					"reason", "not in defaults and no parent found",
 				)
 			}
 		}
@@ -244,7 +228,6 @@ func Classify(userValues, defaultValues Values) *ClassificationResult {
 		"total", result.Total,
 	)
 
-	// Sort entries by path for consistent output
 	sort.Slice(result.Entries, func(i, j int) bool {
 		return result.Entries[i].Path < result.Entries[j].Path
 	})
@@ -262,16 +245,35 @@ func FormatValue(v interface{}) string {
 }
 
 // findParentEmptyMap checks if any parent path of the given key is an empty map in defaults
-// e.g., for "primary::nodeSelector::workload-type", check if "primary::nodeSelector" exists as empty map
 func findParentEmptyMap(path string, defaults Values) string {
 	parts := strings.Split(path, pathSeparator)
 
-	// Check each parent level from most specific to least specific
 	for i := len(parts) - 1; i > 0; i-- {
 		parentPath := strings.Join(parts[:i], pathSeparator)
 		if val, exists := defaults[parentPath]; exists {
 			// Check if this parent is an empty map
 			if emptyMap, ok := val.(map[string]interface{}); ok && len(emptyMap) == 0 {
+				return parentPath
+			}
+		}
+	}
+
+	return ""
+}
+
+// findParentWithChildren checks if any parent path of the given key has children in defaults.
+// This detects when a user customizes a map with different keys than the default
+func findParentWithChildren(path string, defaults Values) string {
+	parts := strings.Split(path, pathSeparator)
+
+	// Check each parent level from most specific to least specific
+	for i := len(parts) - 1; i > 0; i-- {
+		parentPath := strings.Join(parts[:i], pathSeparator)
+		parentPrefix := parentPath + pathSeparator
+
+		// Look for any key in defaults that starts with this parent prefix
+		for defaultPath := range defaults {
+			if strings.HasPrefix(defaultPath, parentPrefix) {
 				return parentPath
 			}
 		}
@@ -295,28 +297,67 @@ func ValuesEqual(a, b interface{}) bool {
 }
 
 // Merge creates an upgraded values file by:
-// 1. Starting with the new chart defaults
-// 2. Overlaying user customizations (values that differ from old defaults)
 func Merge(userValues, oldDefaults, newDefaults Values) Values {
 	result := make(Values)
 
-	// Start with new defaults
+	customizedParents := findCustomizedParentMaps(userValues, oldDefaults)
+
 	for path, value := range newDefaults {
+		if isUnderCustomizedParent(path, customizedParents) {
+			continue
+		}
 		result[path] = value
 	}
 
-	// Overlay user customizations
 	for path, userVal := range userValues {
 		oldDefault, existsInOld := oldDefaults[path]
 
-		// If the value was customized (differs from old default), keep user's value
 		if !existsInOld || !ValuesEqual(userVal, oldDefault) {
 			result[path] = userVal
 		}
-		// If it matches old default, we already have new default in result
 	}
 
 	return result
+}
+
+// findCustomizedParentMaps finds parent paths where the user has customized children
+// with different keys than the old defaults. This indicates the user wants to replace
+// the entire map, not merge with it.
+func findCustomizedParentMaps(userValues, oldDefaults Values) map[string]bool {
+	customizedParents := make(map[string]bool)
+
+	for userPath := range userValues {
+		if _, exists := oldDefaults[userPath]; exists {
+			continue
+		}
+
+		parts := strings.Split(userPath, pathSeparator)
+		for i := len(parts) - 1; i > 0; i-- {
+			parentPath := strings.Join(parts[:i], pathSeparator)
+			parentPrefix := parentPath + pathSeparator
+
+			for oldPath := range oldDefaults {
+				if strings.HasPrefix(oldPath, parentPrefix) {
+					customizedParents[parentPath] = true
+					break
+				}
+			}
+		}
+	}
+
+	return customizedParents
+}
+
+// isUnderCustomizedParent checks if a path is a child of any customized parent
+func isUnderCustomizedParent(path string, customizedParents map[string]bool) bool {
+	parts := strings.Split(path, pathSeparator)
+	for i := len(parts) - 1; i > 0; i-- {
+		parentPath := strings.Join(parts[:i], pathSeparator)
+		if customizedParents[parentPath] {
+			return true
+		}
+	}
+	return false
 }
 
 // ToYAML converts Values back to YAML string
@@ -340,8 +381,6 @@ func (v Values) GetPaths() []string {
 }
 
 // PathToDisplayFormat converts an internal path (using "::" separator) to
-// a human-readable format using "." for display purposes.
-// This handles the conversion correctly, preserving dots that are part of key names.
 func PathToDisplayFormat(path string) string {
 	return strings.ReplaceAll(path, pathSeparator, ".")
 }

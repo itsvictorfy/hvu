@@ -16,19 +16,16 @@ import (
 func GetValuesFileByVersion(repoURL, chartName, version string) (string, error) {
 	settings := cli.New()
 
-	// Try pulling chart directly first (might be cached or available via URL)
 	values, err := tryPullChart(chartName, version, repoURL, settings)
 	if err == nil {
 		return values, nil
 	}
 
-	// Chart not available - add repo and try again
 	repoName, err := addRepoIfNotExists(repoURL, settings)
 	if err != nil {
 		return "", fmt.Errorf("failed to add repository: %w", err)
 	}
 
-	// Try pulling with repo/chart format
 	chartRef := fmt.Sprintf("%s/%s", repoName, chartName)
 	values, err = tryPullChart(chartRef, version, "", settings)
 	if err != nil {
@@ -47,16 +44,13 @@ func tryPullChart(chartRef, version, repoURL string, settings *cli.EnvSettings) 
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Pull the chart
 	err = pullChart(chartRef, version, repoURL, tmpDir, settings)
 	if err != nil {
 		return "", err
 	}
 
-	// Extract chart name from reference (handle "repo/chart" or just "chart")
 	chartName := filepath.Base(chartRef)
 
-	// Read values.yaml from extracted chart
 	return readValuesFromChart(tmpDir, chartName)
 }
 
@@ -90,10 +84,8 @@ func readValuesFromChart(tmpDir, chartName string) (string, error) {
 
 // addRepoIfNotExists adds a Helm repository if it doesn't exist and returns the repo name
 func addRepoIfNotExists(repoURL string, settings *cli.EnvSettings) (string, error) {
-	// Check if repo already exists
 	existingRepoName := findRepoByURL(repoURL, settings)
 	if existingRepoName != "" {
-		// Repo already exists, update its index
 		err := updateRepoIndex(existingRepoName, repoURL, settings)
 		if err != nil {
 			return "", fmt.Errorf("failed to update existing repo: %w", err)
@@ -144,24 +136,20 @@ func updateRepoIndex(repoName, repoURL string, settings *cli.EnvSettings) error 
 func addNewRepo(repoURL string, settings *cli.EnvSettings) (string, error) {
 	providers := getter.All(settings)
 
-	// Load or create repo file
 	repoFile := settings.RepositoryConfig
 	repos, err := repo.LoadFile(repoFile)
 	if err != nil {
 		repos = repo.NewFile()
 	}
 
-	// Generate unique repo name based on URL hash to avoid conflicts
 	hash := sha256.Sum256([]byte(repoURL))
 	repoName := fmt.Sprintf("hvu-%x", hash[:8])
 
-	// Create repo entry
 	entry := &repo.Entry{
 		Name: repoName,
 		URL:  repoURL,
 	}
 
-	// Create and download index
 	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
 		return "", fmt.Errorf("failed to create chart repository: %w", err)
@@ -171,7 +159,6 @@ func addNewRepo(repoURL string, settings *cli.EnvSettings) (string, error) {
 		return "", fmt.Errorf("failed to download repository index: %w", err)
 	}
 
-	// Add to repository file
 	repos.Add(entry)
 	if err := repos.WriteFile(repoFile, 0644); err != nil {
 		return "", fmt.Errorf("failed to write repository file: %w", err)

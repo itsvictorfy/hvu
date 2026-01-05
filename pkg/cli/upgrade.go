@@ -84,20 +84,16 @@ Examples:
 		},
 	}
 
-	// Chart identification
 	cmd.Flags().StringVar(&chart, "chart", "", "chart name")
 	cmd.Flags().StringVar(&repository, "repo", "", "chart repository URL")
 
-	// Version flags
 	cmd.Flags().StringVar(&fromVersion, "from", "", "source chart version")
 	cmd.Flags().StringVar(&toVersion, "to", "", "target chart version")
 
-	// Input/Output
 	cmd.Flags().StringVarP(&valuesFile, "values", "f", "", "path to current values file")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "output directory (default: current directory)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "preview changes without writing files")
 
-	// Required flags
 	_ = cmd.MarkFlagRequired("chart")
 	_ = cmd.MarkFlagRequired("repo")
 	_ = cmd.MarkFlagRequired("from")

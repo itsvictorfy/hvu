@@ -55,7 +55,7 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 		return nil, fmt.Errorf("source and target versions are identical: %s", input.FromVersion)
 	}
 
-	// Step 1: Fetch old and new chart defaults in parallel
+	// Fetch old and new chart defaults in parallel
 	slog.Debug("fetching chart defaults",
 		"oldVersion", input.FromVersion,
 		"newVersion", input.ToVersion,
@@ -103,7 +103,7 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 	}
 	slog.Debug("parsed new defaults", "count", len(newDefaults))
 
-	// Step 2: Parse user values
+	// Parse user values
 	slog.Debug("parsing user values", "file", input.ValuesFile)
 
 	userValues, err := values.ParseFile(input.ValuesFile)
@@ -113,7 +113,7 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 
 	slog.Debug("parsed user values", "count", len(userValues))
 
-	// Step 3: Classify user values against old defaults
+	// Classify user values against old defaults
 	slog.Debug("classifying user values")
 
 	classification := values.Classify(userValues, oldDefaults)
@@ -124,13 +124,13 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 		"unknown", classification.Unknown,
 	)
 
-	// Step 4: Extract comments from new chart defaults
+	// Extract comments from new chart defaults
 	slog.Debug("extracting comments from target chart")
 
 	newComments := values.ExtractComments(newDefaultsYAML)
 	slog.Debug("extracted comments", "count", len(newComments))
 
-	// Step 5: Merge values
+	// Merge values
 	slog.Debug("generating upgraded values")
 
 	upgradedValues := values.Merge(userValues, oldDefaults, newDefaults)
@@ -149,7 +149,7 @@ func Upgrade(input *UpgradeInput) (*UpgradeOutput, error) {
 		UserValuesCount:  len(userValues),
 	}
 
-	// Step 6: Write output (unless dry run)
+	// Write output (unless dry run)
 	if !input.DryRun {
 		slog.Debug("writing output file", "dir", input.OutputDir)
 

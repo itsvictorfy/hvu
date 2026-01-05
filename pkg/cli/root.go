@@ -39,7 +39,6 @@ func Execute() error {
 }
 
 func init() {
-	// Global flags
 	rootCmd.PersistentFlags().StringP("output", "o", "./upgrade-output",
 		"output directory for generated files")
 	rootCmd.PersistentFlags().BoolP("quiet", "q", false,
@@ -47,12 +46,10 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false,
 		"enable verbose logging")
 
-	// Bind flags to viper
 	_ = viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
 	_ = viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
 	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
-	// Add subcommands
 	rootCmd.AddCommand(UpgradeCmd())
 	rootCmd.AddCommand(ClassifyCmd())
 	rootCmd.AddCommand(VersionCmd())

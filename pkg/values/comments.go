@@ -72,14 +72,10 @@ func extractCommentsFromNode(node *yaml.Node, prefix string, comments CommentMap
 					comments[fullPath] = cleanComment(keyNode.LineComment)
 				}
 			}
-
-			// Recurse into nested structures
 			extractCommentsFromNode(valueNode, fullPath, comments)
 		}
 
 	case yaml.SequenceNode:
-		// For arrays, we don't track comments at element level
-		// but we do process nested maps within arrays
 		for _, child := range node.Content {
 			extractCommentsFromNode(child, prefix, comments)
 		}
@@ -107,7 +103,6 @@ func extractParamComments(yamlContent string, comments CommentMap) {
 				}
 
 				// Store the description for this path
-				// Only add if not already present (avoid duplicates from yaml.Node extraction)
 				if description != "" {
 					if existing, ok := comments[path]; ok && existing != "" {
 						// Don't add if existing already contains this description
